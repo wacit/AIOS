@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen3.8-27B on Dual 5060 Ti</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F5F7FA; --surface:#FFFFFF; --surface-2:#EDF1F6; --ink:#18202B; --ink-2:#4B5563; --muted:#7A8594;
+  --line:#D6DDE6; --accent:#2B6CA3; --accent-ink:#1E4F7A; --accent-soft:#E3EEF8;
+  --ok:#2E7D5B; --warn:#B4741B; --warn-soft:#FBF1DE; --crit:#B23A3A; --crit-soft:#FAE6E6;
+  --code-bg:#1C242F; --code-ink:#E4EAF2; --code-cmt:#8FA1B8; --code-str:#9FD3A8;
+  --bar-model:#2B6CA3; --bar-kv:#5C9BD1; --bar-buf:#A9C6E2; --bar-free:#D6DDE6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161D; --surface:#171E27; --surface-2:#1F2833; --ink:#E6EBF2; --ink-2:#B6C0CC; --muted:#8290A0;
+    --line:#2C3743; --accent:#6FA8DC; --accent-ink:#9CC5EA; --accent-soft:#1B2B3C;
+    --ok:#5FBF93; --warn:#E0A64B; --warn-soft:#2E2718; --crit:#E07A7A; --crit-soft:#331C1C;
+    --code-bg:#0C1117; --code-ink:#E4EAF2; --code-cmt:#7C8EA3; --code-str:#9FD3A8;
+    --bar-model:#4A8BC6; --bar-kv:#6FA8DC; --bar-buf:#3C566F; --bar-free:#2C3743;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11161D; --surface:#171E27; --surface-2:#1F2833; --ink:#E6EBF2; --ink-2:#B6C0CC; --muted:#8290A0;
+  --line:#2C3743; --accent:#6FA8DC; --accent-ink:#9CC5EA; --accent-soft:#1B2B3C;
+  --ok:#5FBF93; --warn:#E0A64B; --warn-soft:#2E2718; --crit:#E07A7A; --crit-soft:#331C1C;
+  --code-bg:#0C1117; --code-ink:#E4EAF2; --code-cmt:#7C8EA3; --code-str:#9FD3A8;
+  --bar-model:#4A8BC6; --bar-kv:#6FA8DC; --bar-buf:#3C566F; --bar-free:#2C3743;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,pre,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace}
+code{background:var(--surface-2);padding:.1em .4em;border-radius:4px;font-size:.88em}
+pre{background:var(--code-bg);color:var(--code-ink);padding:1rem 1.2rem;border-radius:8px;overflow-x:auto;font-size:.85rem;line-height:1.55;margin:1rem 0}
+pre code{background:none;padding:0;font-size:inherit}
+pre .c{color:var(--code-cmt)} pre .s{color:var(--code-str)}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:2.6rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.6rem;font-weight:700;margin-top:3.5rem;padding-top:1.5rem;border-top:1px solid var(--line)}
+h3{font-size:1.15rem;font-weight:700;margin-top:2rem}
+h2+p,h3+p{margin-top:.6rem}
+p{margin:.9rem 0}
+.eyebrow{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:3rem;max-width:1140px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
+nav{position:sticky;top:1.5rem;align-self:start;font-size:.86rem}
+nav ol{list-style:none;padding:0;margin:.8rem 0 0;display:flex;flex-direction:column;gap:.15rem}
+nav a{display:block;padding:.3rem .6rem;border-radius:5px;color:var(--ink-2)}
+nav a:hover{background:var(--surface-2);text-decoration:none;color:var(--ink)}
+nav .n{display:inline-block;width:1.6em;color:var(--muted);font-variant-numeric:tabular-nums}
+main{max-width:72ch;min-width:0}
+header p.lede{font-size:1.15rem;color:var(--ink-2);max-width:60ch;margin-top:1rem}
+.spec{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:1.8rem 0}
+.spec div{background:var(--surface);padding:.8rem 1rem}
+.spec .k{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.spec .v{font-weight:600;margin-top:.15rem}
+.spec .s{font-size:.8rem;color:var(--ink-2)}
+table{border-collapse:collapse;width:100%;font-size:.92rem;margin:1rem 0}
+.tw{overflow-x:auto}
+th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.pick td{background:var(--accent-soft);font-weight:600}
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:.8rem 1rem;border-radius:0 6px 6px 0;margin:1.2rem 0;font-size:.95rem}
+.note.warn{border-color:var(--warn);background:var(--warn-soft)}
+.note.crit{border-color:var(--crit);background:var(--crit-soft)}
+.note strong{display:block;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.25rem}
+.steps{counter-reset:step;list-style:none;padding:0;margin:1.2rem 0}
+.steps>li{counter-increment:step;position:relative;padding-left:3rem;margin:1.4rem 0}
+.steps>li::before{content:counter(step);position:absolute;left:0;top:.1rem;width:2rem;height:2rem;border-radius:50%;background:var(--accent);color:#fff;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:.95rem}
+.steps>li>strong{display:block;font-weight:600}
+.steps>li>p{margin:.3rem 0}
+.tabs{display:flex;gap:.4rem;margin-top:1.4rem}
+.tabs button{font:inherit;font-size:.86rem;font-weight:600;padding:.4rem .9rem;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:6px 6px 0 0;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--code-bg);color:var(--code-ink);border-color:var(--code-bg)}
+.tabs+pre{margin-top:0;border-top-left-radius:0}
+.budget{margin:1.4rem 0}
+.bar{display:flex;height:34px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.bar span{display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden}
+.bar .free{color:var(--ink-2)}
+.legend{display:flex;flex-wrap:wrap;gap:.4rem 1.4rem;font-size:.82rem;margin-top:.6rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:.8em;height:.8em;border-radius:2px;margin-right:.4em;vertical-align:-.05em}
+.flag{display:grid;grid-template-columns:minmax(200px,.9fr) 2fr;gap:.6rem 1.2rem;font-size:.93rem;margin:1rem 0}
+.flag>div:nth-child(odd){font-family:"IBM Plex Mono",monospace;font-size:.83rem;color:var(--accent-ink);padding-top:.1rem}
+.flag>div{padding:.5rem 0;border-bottom:1px solid var(--line)}
+dl.fix dt{font-weight:600;margin-top:1rem}
+dl.fix dd{margin:.25rem 0 0 0;color:var(--ink-2)}
+footer{margin-top:4rem;padding-top:1.5rem;border-top:1px solid var(--line);font-size:.85rem;color:var(--ink-2)}
+footer ul{padding-left:1.2rem}
+@media (max-width:820px){.layout{grid-template-columns:1fr;gap:1.5rem}nav{position:static}nav ol{flex-direction:row;flex-wrap:wrap}}
+@media (prefers-reduced-motion:no-preference){nav a{transition:background .15s}}
+</style>
+</head>
+<body>
+
+<div class="layout">
+<nav aria-label="Contents">
+  <div class="eyebrow">Runbook</div>
+  <ol>
+    <li><a href="#overview"><span class="n">–</span>Overview</a></li>
+    <li><a href="#files"><span class="n">–</span>What's in the folder</a></li>
+    <li><a href="#s1"><span class="n">1</span>Prerequisites</a></li>
+    <li><a href="#s2"><span class="n">2</span>Build on Windows</a></li>
+    <li><a href="#s3"><span class="n">3</span>Build on Ubuntu</a></li>
+    <li><a href="#s4"><span class="n">4</span>Launch Qwen3.8-27B</a></li>
+    <li><a href="#s5"><span class="n">5</span>Benchmark &amp; tune</a></li>
+    <li><a href="#s6"><span class="n">6</span>Verify it works</a></li>
+    <li><a href="#why"><span class="n">–</span>Why these settings</a></li>
+    <li><a href="#flags"><span class="n">–</span>Flag reference</a></li>
+    <li><a href="#trouble"><span class="n">–</span>Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<main>
+<header id="overview">
+  <div class="eyebrow">llama.cpp · CUDA · Blackwell sm_120</div>
+  <h1 style="margin-top:.5rem">Qwen3.8-27B on Dual 5060 Ti</h1>
+  <p class="lede">Build llama.cpp from source for the hardware it lands on, then run Qwen3.8-27B with the settings that get the most tokens per second out of two 16&nbsp;GB Blackwell cards.</p>
+  <div class="spec">
+    <div><div class="k">GPU</div><div class="v">2× RTX 5060 Ti</div><div class="s">16 GB each · compute 12.0 · 448 GB/s</div></div>
+    <div><div class="k">CPU</div><div class="v">Ryzen 7 9800X3D</div><div class="s">8 cores / 16 threads · Zen 5 · AVX-512</div></div>
+    <div><div class="k">RAM</div><div class="v">64 GB</div><div class="s">plenty for model load + page cache</div></div>
+    <div><div class="k">Model</div><div class="v">Qwen3.8-27B</div><div class="s">unsloth GGUF · UD-Q4_K_XL · MTP head</div></div>
+    <div><div class="k">Priority</div><div class="v">Decode speed</div><div class="s">single-user, one request at a time</div></div>
+  </div>
+  <p>The scripts detect what they are running on, so the same files work on the Windows desktop and on the Ubuntu VM (walt-ai). The tuned defaults assume this box; on different hardware the auto-selection picks a quant that fits and you adjust from there.</p>
+</header>
+
+<h2 id="files">What's in the folder</h2>
+<p>Everything lives in <code>C:\code\Work\llama</code>. Copy the two <code>.sh</code> files to the Ubuntu box when you build there.</p>
+<div class="tw"><table>
+<tr><th>File</th><th>Runs on</th><th>Does</th></tr>
+<tr><td><code>aios.py</code></td><td>both</td><td><strong>Browser front end.</strong> <code>python aios.py</code> opens <code>http://localhost:7800</code>: detects the machine, runs the build scripts with a live log, recommends and downloads a Hugging Face quant that fits the detected VRAM, starts/stops <code>llama-server</code> and has a test prompt box. Stdlib only — nothing to install.</td></tr>
+<tr><td><code>build-llama.ps1</code></td><td>Windows 11</td><td>Detects CPU/RAM/GPUs, installs Git, CMake, Ninja, VS Build Tools and CUDA via winget if missing, clones llama.cpp, builds, copies binaries to <code>bin\</code></td></tr>
+<tr><td><code>build-llama.sh</code></td><td>Ubuntu 22.04+</td><td>Same via apt, adding the NVIDIA CUDA repo and an older <code>g++</code> host compiler when the system GCC is too new</td></tr>
+<tr><td><code>run-qwen.ps1</code> / <code>run-qwen.sh</code></td><td>both</td><td>Picks a quant for the detected VRAM and starts <code>llama-server -hf unsloth/Qwen3.8-27B-GGUF:&lt;quant&gt;</code>; llama.cpp downloads and caches the GGUF in <code>models/</code>. <code>-Bench</code> runs <code>llama-bench</code> instead</td></tr>
+<tr><td><code>bin/build-info.json</code></td><td>generated</td><td>Commit, CUDA version, arch list and hardware the binaries were built for — keep it next to the binaries</td></tr>
+</table></div>
+
+<h2 id="s1">Step 1 — Prerequisites</h2>
+<ol class="steps">
+<li><strong>NVIDIA driver that knows about Blackwell</strong><p>Anything 570+ on Windows; on Ubuntu <code>sudo ubuntu-drivers install</code> or <code>nvidia-driver-580</code>. Confirm with <code>nvidia-smi</code> showing both cards and <code>compute_cap 12.0</code>. The build scripts do <em>not</em> install the driver — only the toolkit.</p></li>
+<li><strong>Disk space</strong><p>About 6 GB for the CUDA toolkit, 3 GB for the llama.cpp build tree, and 17 GB per model quant. Put <code>models/</code> on the NVMe.</p></li>
+<li><strong>Internet for the first run</strong><p>winget/apt downloads, the GitHub clone, and the Hugging Face model pull. Later re-runs only fetch new commits.</p></li>
+<li><strong>Windows only: PowerShell execution policy</strong><p>Launch with <code>-ExecutionPolicy Bypass</code> as shown below, or run <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> once. If winget has to install Build Tools or CUDA it will prompt for elevation.</p></li>
+</ol>
+
+<div class="note"><strong>Shortcut: AIOS</strong>Steps 2–4 can be done from the browser instead: <code>python aios.py</code>, then Build → pick a model (the recommender marks the quant that fits) → Download → Start server. Backend can be forced to CUDA, Vulkan (Intel Arc / AMD) or CPU. The scripts below are what AIOS runs under the hood.</div>
+<h2 id="s2">Step 2 — Build on Windows</h2>
+<pre><code><span class="c"># from C:\code\Work\llama, ordinary PowerShell</span>
+powershell -ExecutionPolicy Bypass -File .\build-llama.ps1
+
+<span class="c"># options</span>
+.\build-llama.ps1 -Clean          <span class="c"># wipe build dir first</span>
+.\build-llama.ps1 -SkipInstall    <span class="c"># detect only, never winget-install</span>
+.\build-llama.ps1 -Branch b7400   <span class="c"># pin a tag/commit instead of master</span></code></pre>
+<p>What you will see, in order: a hardware summary (both GPUs with <code>cc=12.0</code> and <code>CUDA architectures: 120</code>), toolchain checks, the clone or update, a CMake configure line, then a long compile — the CUDA kernels take 15–30 minutes on the 9800X3D the first time; later builds are incremental. It finishes with <code>llama-cli --version</code> and <code>llama-server --list-devices</code>, which must list <code>CUDA0</code> and <code>CUDA1</code>.</p>
+<div class="note"><strong>Why Ninja, not the Visual Studio generator</strong>The Visual Studio generator needs CUDA's MSBuild integration, which is often missing on Build Tools-only installs and fails with "No CUDA toolset found". The script opens a VS developer shell and drives <code>nvcc</code> + <code>cl</code> through Ninja instead, which sidesteps that entirely.</div>
+
+<h2 id="s3">Step 3 — Build on Ubuntu (walt-ai)</h2>
+<pre><code>scp build-llama.sh run-qwen.sh walt-ai:~/llama/
+ssh walt-ai
+cd ~/llama && chmod +x *.sh
+./build-llama.sh                  <span class="c"># --clean / --skip-install / --branch &lt;ref&gt;</span></code></pre>
+<p>On a fresh VM the script adds the NVIDIA apt repo matching the Ubuntu release and installs <code>cuda-toolkit</code> (toolkit only, so it never fights the driver the host passed through). If <code>gcc --version</code> is newer than that toolkit supports it installs <code>g++-14</code> (or <code>-15</code> for CUDA 13) and passes it as the CUDA host compiler. Ubuntu 22.04's CMake 3.22 is too old, so Kitware's repo is added there.</p>
+<div class="note"><strong>Static binaries on purpose</strong>The build sets <code>BUILD_SHARED_LIBS=OFF</code>. With shared libs, a rebuilt <code>llama-server</code> can silently load a stale <code>libggml-cuda.so</code> from <code>LD_LIBRARY_PATH</code> and produce garbage output while everything looks healthy — the exact failure reported in llama.cpp discussion #27164 for this model.</div>
+
+<h2 id="s4">Step 4 — Launch Qwen3.8-27B</h2>
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="win">Windows</button>
+  <button role="tab" aria-selected="false" data-tab="lin">Ubuntu</button>
+</div>
+<pre id="tab-win"><code>.\run-qwen.ps1                              <span class="c"># default speed profile, http://0.0.0.0:8080</span>
+.\run-qwen.ps1 -BindHost 127.0.0.1          <span class="c"># local only</span>
+.\run-qwen.ps1 -Vision                      <span class="c"># + image input (downloads mmproj-F16.gguf)</span>
+.\run-qwen.ps1 -Ctx 262144 -KvType q4_0 -NoMtp   <span class="c"># full 256K context</span>
+.\run-qwen.ps1 -NoMtp -Parallel 4           <span class="c"># 4 concurrent slots (no MTP)</span>
+.\run-qwen.ps1 -Quant Q5_K_M                <span class="c"># trade speed for quality (any tag in the HF repo)</span></code></pre>
+<pre id="tab-lin" hidden><code>./run-qwen.sh                               <span class="c"># default speed profile, http://0.0.0.0:8080</span>
+./run-qwen.sh --host 127.0.0.1              <span class="c"># local only</span>
+./run-qwen.sh --vision                      <span class="c"># + image input (downloads mmproj-F16.gguf)</span>
+./run-qwen.sh --ctx 262144 --kv q4_0 --no-mtp    <span class="c"># full 256K context</span>
+./run-qwen.sh --no-mtp --parallel 4         <span class="c"># 4 concurrent slots (no MTP)</span>
+./run-qwen.sh --quant Q5_K_M                <span class="c"># trade speed for quality</span></code></pre>
+<p>The first run has llama.cpp itself download <code>UD-Q4_K_XL</code> (~17.5 GB) from <code>unsloth/Qwen3.8-27B-GGUF</code> into <code>models/</code> (resumable; later runs reuse it), after printing the full command it is about to execute. The default command is:</p>
+<pre><code>llama-server -hf unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL --jinja -ngl 999 -sm layer --no-mmproj \
+  -c 65536 -fa on --cache-type-k q8_0 --cache-type-v q8_0 -b 2048 -ub 512 -t 8 \
+  --parallel 1 --spec-type draft-mtp --spec-draft-n-max 2 \
+  --host 0.0.0.0 --port 8080 --metrics</code></pre>
+<p>The OpenAI-compatible endpoint is <code>http://&lt;host&gt;:8080/v1</code> — point OpenCode, Open WebUI or the latency monitor at it. The built-in chat UI is at <code>/</code>, Prometheus metrics at <code>/metrics</code>.</p>
+
+<h2 id="s5">Step 5 — Benchmark and tune</h2>
+<p>Layer split is the safe default; whether row split wins depends on the PCIe lanes each card actually gets. Run both once and keep the faster:</p>
+<pre><code>.\run-qwen.ps1 -Bench                 <span class="c"># -sm layer</span>
+.\run-qwen.ps1 -Bench -Split row      <span class="c"># -sm row</span>
+<span class="c"># Ubuntu: ./run-qwen.sh --bench  /  ./run-qwen.sh --bench --split row</span></code></pre>
+<p><code>llama-bench</code> reports <code>pp512</code> (prompt processing) and <code>tg128</code> (generation) in tokens/s. Row split can help <code>tg</code> by pulling bandwidth from both cards but often loses on consumer PCIe; the number decides. Note <code>llama-bench</code> does not exercise MTP — expect the live server to be 33–39 % faster at generation than <code>tg128</code> shows.</p>
+<h3>Where the 32 GB goes (default profile)</h3>
+<div class="budget">
+  <div class="bar">
+    <span style="flex:17.5;background:var(--bar-model)">UD-Q4_K_XL weights ≈17.5 GB</span>
+    <span style="flex:4;background:var(--bar-kv)">KV 64K q8_0 ≈4 GB</span>
+    <span style="flex:3;background:var(--bar-buf)">MTP + compute ≈3 GB</span>
+    <span style="flex:7.5;background:var(--bar-free)" class="free">free ≈7.5 GB</span>
+  </div>
+  <div class="legend"><span><i style="background:var(--bar-model)"></i>weights, split over both cards</span><span><i style="background:var(--bar-kv)"></i>KV cache (16 attention layers only)</span><span><i style="background:var(--bar-buf)"></i>draft head, CUDA graphs, batch buffers</span><span><i style="background:var(--bar-free)"></i>headroom for longer context or Q5_K_M</span></div>
+</div>
+<div class="tw"><table>
+<tr><th>Quant</th><th class="num">Size</th><th>On 2×16 GB</th><th>When to use</th></tr>
+<tr><td>Q3_K_M</td><td class="num">13.8 GB</td><td>fits one card</td><td>single-GPU fallback; noticeable quality loss</td></tr>
+<tr><td>IQ4_XS</td><td class="num">15.7 GB</td><td>one card, no room left</td><td>skip — no space for KV, draft head or buffers</td></tr>
+<tr class="pick"><td>UD-Q4_K_XL</td><td class="num">~17.5 GB</td><td>split, ~12 GB free</td><td>default: Unsloth dynamic 4-bit — Q4_K_M size, better quality</td></tr>
+<tr><td>Q4_K_M</td><td class="num">17.1 GB</td><td>split, ~13 GB free</td><td>plain 4-bit; marginally faster, slightly worse</td></tr>
+<tr><td>Q5_K_M</td><td class="num">19.8 GB</td><td>split, ~10 GB free</td><td>better quality, ~10–15 % slower</td></tr>
+<tr><td>Q6_K</td><td class="num">22.9 GB</td><td>split, ~7 GB free</td><td>near-lossless, 32K context comfortable</td></tr>
+<tr><td>Q8_0</td><td class="num">29.0 GB</td><td>split, ~1 GB free</td><td>only with tiny context; not practical here</td></tr>
+</table></div>
+
+<h2 id="s6">Step 6 — Verify it works</h2>
+<ol class="steps">
+<li><strong>Both GPUs loaded</strong><p>While the server runs, <code>nvidia-smi</code> should show roughly 10–12 GB used on each card. If one card sits near zero, the split did not happen — check <code>-sm</code> and that <code>--list-devices</code> shows two CUDA devices.</p></li>
+<li><strong>Coherent output</strong><p><code>curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"messages":[{"role":"user","content":"Explain the 9800X3D cache in two sentences."}]}'</code>. Garbled or repeating text means a stale build, not a bad model — see Troubleshooting.</p></li>
+<li><strong>MTP is active</strong><p>The server log prints draft acceptance statistics per request; acceptance around 0.75–0.82 is expected with <code>n-max 2</code>. If the log never mentions the draft, the GGUF lacks the <code>blk.*.nextn.*</code> tensors — use the unsloth repo.</p></li>
+<li><strong>Stops cleanly</strong><p>Responses end at the model's turn without trailing chatter. If they ramble or get cut off, <code>--jinja</code> is missing or the template in the GGUF is old.</p></li>
+</ol>
+
+<h2 id="why">Why these settings</h2>
+<h3>The build</h3>
+<p>Blackwell consumer cards are compute capability 12.0. That target is not in llama.cpp's default arch list and needs CUDA Toolkit 12.8 or newer, so the scripts read <code>compute_cap</code> from <code>nvidia-smi</code>, set <code>CMAKE_CUDA_ARCHITECTURES=120</code>, and upgrade the toolkit if the installed one is older. <code>GGML_NATIVE=ON</code> compiles for the 9800X3D's AVX-512 — it only touches the small CPU-side work, but it also means these binaries should not be copied to a different CPU. <code>GGML_CUDA_FA_ALL_QUANTS=ON</code> compiles the flash-attention kernels for quantized KV cache so <code>q8_0</code>/<code>q4_0</code> caches run on the GPU rather than falling back.</p>
+<p>HTTPS is compiled in — <code>LLAMA_BUILD_BORINGSSL=ON</code> on Windows, <code>LLAMA_OPENSSL=ON</code> with <code>libssl-dev</code> on Ubuntu — because llama.cpp no longer uses libcurl and <code>-hf</code> downloads fail with "HTTPS support disabled" otherwise.</p>
+<p>The clone is always full-depth. A <code>--depth 1</code> clone reports "Already up to date" while sitting hundreds of commits behind master, and the CUDA path for this model's DeltaNet layers was fixed on master recently — stale builds are the documented cause of corrupted Qwen3.8 output.</p>
+<h3>The model</h3>
+<p>Qwen3.8-27B is a hybrid: 48 linear-attention (DeltaNet) layers and 16 full-attention layers. Only the 16 full layers keep a KV cache, so context costs about 64 KB per token at f16 — a quarter of a conventional 64-layer model. 64K context in <code>q8_0</code> is ~4 GB; even 256K fits in <code>q4_0</code>.</p>
+<p>The weights do not fit one 16 GB card at any quant worth running, so the model is split. Layer split runs the cards in sequence, which means generation is bounded by one 5060 Ti's 448 GB/s — roughly 40 tok/s class for a 17 GB file — and the second card contributes capacity, not speed. MTP speculative decoding is where the speed comes from: the GGUF carries a multi-token-prediction head, and <code>--spec-type draft-mtp --spec-draft-n-max 2</code> lets it propose two tokens per step at ~80 % acceptance for a 33–39 % gain. It currently requires <code>--parallel 1</code>, which matches the single-user priority; for concurrent slots drop MTP.</p>
+
+<h2 id="flags">Flag reference</h2>
+<div class="flag">
+<div>--jinja</div><div>Use the GGUF's Jinja chat template. Mandatory for Qwen3.8 — without it the turn boundaries and stop tokens are wrong.</div>
+<div>-ngl 999</div><div>Offload every layer to GPU. 999 is "all" regardless of layer count.</div>
+<div>-sm layer | row</div><div>How to divide tensors across the two cards. Layer = whole layers per card (default). Row = each matrix split across both; benchmark before adopting.</div>
+<div>-c 65536</div><div>Context window in tokens. Model supports 262144.</div>
+<div>-fa on</div><div>Flash attention. Required for quantized KV and the MTP path.</div>
+<div>--cache-type-k/v q8_0</div><div>KV cache precision. <code>q8_0</code> is visually lossless; <code>q4_0</code> halves it again for very long context.</div>
+<div>-b 2048 -ub 512</div><div>Logical / physical batch for prompt processing. Larger <code>-ub</code> costs VRAM for little gain on this class of card.</div>
+<div>-t 8</div><div>CPU threads = physical cores. Nearly irrelevant once fully offloaded; keep it at 8 so SMT siblings don't fight the game/desktop.</div>
+<div>--parallel 1</div><div>Request slots. MTP requires 1; each extra slot reserves its own share of the context.</div>
+<div>--spec-type draft-mtp</div><div>Speculative decoding using the model's own MTP head instead of a separate draft model.</div>
+<div>--spec-draft-n-max 2</div><div>Tokens drafted per step. 2 is the sweet spot measured for this model; 3 lowers acceptance.</div>
+<div>--no-mmproj / -Vision</div><div><code>-hf</code> downloads the 0.9 GB vision encoder by default; the scripts pass <code>--no-mmproj</code> unless you ask for <code>-Vision</code>.</div>
+<div>--metrics</div><div>Prometheus endpoint at <code>/metrics</code> for the latency monitor.</div>
+<div>CUDA_MODULE_LOADING=LAZY</div><div>Env var set by the launch scripts; faster startup and less VRAM for unused kernels.</div>
+</div>
+
+<h2 id="trouble">Troubleshooting</h2>
+<dl class="fix">
+<dt><code>nvcc fatal: Unsupported gpu architecture 'compute_120'</code></dt>
+<dd>The CUDA toolkit is older than 12.8. Re-run the build script — it installs a newer one. On Windows, uninstall the old toolkit first if a <code>cudart64_12.dll</code> conflict appears after the upgrade.</dd>
+<dt><code>#error -- unsupported GNU version</code> (Ubuntu)</dt>
+<dd>Host GCC is newer than the toolkit accepts. The script installs a supported <code>g++-N</code> automatically; with <code>--skip-install</code>, install it yourself and re-run.</dd>
+<dt><code>No CUDA toolset found</code> (Windows)</dt>
+<dd>You ran CMake with the Visual Studio generator by hand. Use the script (Ninja) or copy CUDA's <code>MSBuildExtensions</code> into the Build Tools install.</dd>
+<dt>Garbled, repeating, or empty responses</dt>
+<dd>Almost always a stale build. Check <code>git -C llama.cpp log -1</code> against GitHub master, re-run the build script, and confirm you launched <code>bin/llama-server</code> rather than another copy on <code>PATH</code>. It is not an MTP problem — the base model fails the same way without it.</dd>
+<dt>Only one GPU is used</dt>
+<dd><code>llama-server --list-devices</code> must show two CUDA devices. On the Proxmox VM, both cards need to be passed through; on Windows, check <code>CUDA_VISIBLE_DEVICES</code> is unset.</dd>
+<dt>Out of memory at load</dt>
+<dd>Lower <code>-Ctx</code>, switch KV to <code>q4_0</code>, or pick a smaller quant. Close anything else holding VRAM (browsers with hardware acceleration count).</dd>
+<dt><code>-hf</code> fails with "HTTPS support disabled"</dt>
+<dd>The binaries were built without an SSL library. Re-run the build script — it enables BoringSSL (Windows) or OpenSSL (Ubuntu).</dd>
+<dt><code>-hf</code> cannot find the quant</dt>
+<dd>The tag after the colon must match a file in <a href="https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/tree/main">the repo</a> (e.g. <code>UD-Q4_K_XL</code>, <code>Q5_K_M</code>). Pass it with <code>-Quant</code>.</dd>
+</dl>
+
+<footer>
+<div class="eyebrow">Sources</div>
+<ul>
+<li><a href="https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md">llama.cpp docs/build.md</a> — CUDA CMake options</li>
+<li><a href="https://github.com/ggml-org/llama.cpp/discussions/27164">llama.cpp discussion #27164</a> — Qwen3.8-27B corrupted output traced to a stale shallow clone and mismatched shared libs</li>
+<li><a href="https://github.com/ggml-org/llama.cpp/issues/22696">llama.cpp issue #22696</a> — Windows Blackwell sm_120 workarounds</li>
+<li><a href="https://github.com/sudoingX/qwen38-mtp">sudoingX/qwen38-mtp</a> — MTP flags, acceptance rates and benchmarks</li>
+<li><a href="https://dev.to/purpledoubled/run-qwen-38-27b-locally-real-gguf-sizes-the-kv-cache-trick-and-the-template-trap-114j">Run Qwen 3.8 27B Locally</a> — quant sizes, KV maths, chat template</li>
+<li><a href="https://runaihome.com/blog/llama-cpp-build-cuda-errors-fix-2026/">llama.cpp CUDA build errors (2026)</a> — compute_120, GCC and CMake fixes</li>
+</ul>
+</footer>
+</main>
+</div>
+<script>
+document.querySelectorAll('.tabs button').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.tabs button').forEach(function(x){x.setAttribute('aria-selected',x===b?'true':'false');});
+    document.getElementById('tab-win').hidden = b.dataset.tab!=='win';
+    document.getElementById('tab-lin').hidden = b.dataset.tab!=='lin';
+  });
+});
+</script>
+</body>
+</html>

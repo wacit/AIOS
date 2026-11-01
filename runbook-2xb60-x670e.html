@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dual B60 ProArt Build</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F4F6F8; --surface:#FFFFFF; --surface-2:#EAEEF2; --ink:#161C24; --ink-2:#48525E; --muted:#76828F;
+  --line:#D3DAE2; --accent:#0F6E8C; --accent-ink:#0B5269; --accent-soft:#DDEEF3;
+  --ok:#2E7D5B; --ok-soft:#E1F1E9; --warn:#A9681A; --warn-soft:#FBF0DC; --crit:#B23A3A; --crit-soft:#FAE6E6;
+  --code-bg:#1A222C; --code-ink:#E4EAF2; --code-cmt:#8A9CB3; --code-str:#9FD3A8; --code-kw:#8FC8E0;
+  --bar-model:#0F6E8C; --bar-kv:#4FA3BE; --bar-buf:#A6CFDC; --bar-free:#D3DAE2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F141A; --surface:#161D25; --surface-2:#1E2731; --ink:#E6EBF2; --ink-2:#B3BDC9; --muted:#7F8C9B;
+    --line:#2A3542; --accent:#5FB3CC; --accent-ink:#8ACBDE; --accent-soft:#12303A;
+    --ok:#5FBF93; --ok-soft:#14291F; --warn:#E0A64B; --warn-soft:#2E2718; --crit:#E07A7A; --crit-soft:#331C1C;
+    --code-bg:#0B1015; --code-ink:#E4EAF2; --code-cmt:#7C8EA3; --code-str:#9FD3A8; --code-kw:#8FC8E0;
+    --bar-model:#3E93AD; --bar-kv:#5FB3CC; --bar-buf:#2E5765; --bar-free:#2A3542;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F141A; --surface:#161D25; --surface-2:#1E2731; --ink:#E6EBF2; --ink-2:#B3BDC9; --muted:#7F8C9B;
+  --line:#2A3542; --accent:#5FB3CC; --accent-ink:#8ACBDE; --accent-soft:#12303A;
+  --ok:#5FBF93; --ok-soft:#14291F; --warn:#E0A64B; --warn-soft:#2E2718; --crit:#E07A7A; --crit-soft:#331C1C;
+  --code-bg:#0B1015; --code-ink:#E4EAF2; --code-cmt:#7C8EA3; --code-str:#9FD3A8; --code-kw:#8FC8E0;
+  --bar-model:#3E93AD; --bar-kv:#5FB3CC; --bar-buf:#2E5765; --bar-free:#2A3542;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,pre,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace}
+code{background:var(--surface-2);padding:.1em .4em;border-radius:4px;font-size:.88em}
+pre{background:var(--code-bg);color:var(--code-ink);padding:1rem 1.2rem;border-radius:8px;overflow-x:auto;font-size:.84rem;line-height:1.55;margin:1rem 0}
+pre code{background:none;padding:0;font-size:inherit}
+pre .c{color:var(--code-cmt)} pre .s{color:var(--code-str)} pre .k{color:var(--code-kw)}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:2.5rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.55rem;font-weight:700;margin-top:3.5rem;padding-top:1.5rem;border-top:1px solid var(--line)}
+h3{font-size:1.12rem;font-weight:700;margin-top:1.8rem}
+h2+p,h3+p{margin-top:.6rem}
+p{margin:.9rem 0}
+ul,ol{padding-left:1.3rem}li{margin:.3rem 0}
+.eyebrow{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:3rem;max-width:1140px;margin:0 auto;padding-block:2.5rem 5rem;padding-inline:1.5rem}
+nav{position:sticky;top:calc(env(safe-area-inset-top,0px) + 1.5rem);align-self:start;font-size:.86rem}
+nav ol{list-style:none;padding:0;margin:.8rem 0 0;display:flex;flex-direction:column;gap:.15rem}
+nav a{display:block;padding:.3rem .6rem;border-radius:5px;color:var(--ink-2)}
+nav a:hover{background:var(--surface-2);text-decoration:none}
+nav .ph{color:var(--muted);font-size:.7rem;margin-right:.35rem;font-variant-numeric:tabular-nums}
+header .lede{font-size:1.1rem;color:var(--ink-2);max-width:62ch;margin-top:1rem}
+.spec{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin:1.6rem 0 0}
+.spec div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.7rem .9rem}
+.spec .k{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.spec .v{font-weight:600;margin-top:.15rem;font-variant-numeric:tabular-nums}
+.gate{border-left:4px solid var(--ok);background:var(--ok-soft);padding:.8rem 1rem;border-radius:0 8px 8px 0;margin:1.4rem 0}
+.gate b{color:var(--ok)}
+.callout{border-left:4px solid var(--warn);background:var(--warn-soft);padding:.8rem 1rem;border-radius:0 8px 8px 0;margin:1.2rem 0}
+.callout.crit{border-color:var(--crit);background:var(--crit-soft)}
+.callout.info{border-color:var(--accent);background:var(--accent-soft)}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0}
+.tw{overflow-x:auto}
+th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.mono,td code{white-space:nowrap}
+.vram{margin:1.2rem 0}
+.vram .row{display:grid;grid-template-columns:170px minmax(0,1fr) 90px;gap:.8rem;align-items:center;margin:.45rem 0;font-size:.88rem}
+.vram .bar{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--bar-free)}
+.vram .bar span{display:block;height:100%}
+.vram .m{background:var(--bar-model)}.vram .kv{background:var(--bar-kv)}.vram .b{background:var(--bar-buf)}
+.vram .t{text-align:right;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:1.2rem;font-size:.78rem;color:var(--muted);margin-top:.5rem;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.35rem;vertical-align:-1px}
+.pill{display:inline-block;font-size:.72rem;font-weight:600;padding:.1rem .5rem;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);letter-spacing:.03em}
+.steps{counter-reset:s;list-style:none;padding:0;margin:1rem 0}
+.steps li{counter-increment:s;position:relative;padding-left:2.4rem;margin:.9rem 0}
+.steps li::before{content:counter(s);position:absolute;left:0;top:.05rem;width:1.7rem;height:1.7rem;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:.85rem;display:flex;align-items:center;justify-content:center;font-family:"IBM Plex Mono",monospace}
+.topo{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.6rem;margin:1rem 0}
+.slot{border:1px solid var(--line);border-radius:8px;padding:.6rem .7rem;background:var(--surface);font-size:.84rem}
+.slot .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--muted)}
+.slot.gpu{border-color:var(--accent);background:var(--accent-soft)}
+.slot .w{font-weight:600}
+@media (max-width:820px){.layout{grid-template-columns:1fr;gap:1.5rem}nav{position:static}h1{font-size:2rem}.vram .row{grid-template-columns:1fr;gap:.25rem}.vram .t{text-align:left}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav aria-label="Phases">
+  <div class="eyebrow">Runbook</div>
+  <ol>
+    <li><a href="#box"><span class="ph">00</span>The box</a></li>
+    <li><a href="#p1"><span class="ph">01</span>Hardware &amp; power</a></li>
+    <li><a href="#p2"><span class="ph">02</span>BIOS</a></li>
+    <li><a href="#p3"><span class="ph">03</span>Windows &amp; driver</a></li>
+    <li><a href="#p4"><span class="ph">04</span>Toolchain</a></li>
+    <li><a href="#p5"><span class="ph">05</span>AIOS &amp; build</a></li>
+    <li><a href="#p6"><span class="ph">06</span>Serve</a></li>
+    <li><a href="#p7"><span class="ph">07</span>Verify &amp; benchmark</a></li>
+    <li><a href="#p8"><span class="ph">08</span>Tuning</a></li>
+    <li><a href="#ref"><span class="ph">—</span>Flag &amp; env reference</a></li>
+    <li><a href="#trouble"><span class="ph">—</span>Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <div class="eyebrow">llama.cpp · SYCL · Windows 11</div>
+  <h1>Two Arc Pro B60s on the ProArt X670E</h1>
+  <p class="lede">Phase‑gated setup for the two‑card Intel workstation: from the BIOS settings that let two 24 GB frame buffers map, through the oneAPI toolchain llama.cpp's Battlemage kernels need, to a served model split across both cards (or one model per card) with AIOS. Each phase ends with a gate; don't move on until it passes.</p>
+  <div class="spec">
+    <div><div class="k">Board</div><div class="v">ASUS ProArt X670E‑Creator WiFi</div></div>
+    <div><div class="k">CPU</div><div class="v">Ryzen 9 9950X3D · 16C/32T Zen 5</div></div>
+    <div><div class="k">RAM</div><div class="v">64 GB DDR5</div></div>
+    <div><div class="k">GPUs</div><div class="v">2 × Arc Pro B60 24 GB</div></div>
+    <div><div class="k">VRAM total</div><div class="v">48 GB (≈41.6 GB usable)</div></div>
+    <div><div class="k">AIOS</div><div class="v">0.3.6 · scripts v6</div></div>
+  </div>
+</header>
+
+<h2 id="box">00 — What this box is, and the two numbers that shape it</h2>
+<p>Each Arc Pro B60 is a Battlemage (Xe2‑HPG) card with 20 Xe‑cores, 24 GB of GDDR6 on a 192‑bit bus (456 GB/s), a PCIe 5.0 <b>x8</b> electrical link and a 120–200 W board power range. The Windows driver exposes about 20.8 GB per card, so plan on <b>≈41.6 GB of usable VRAM</b> across the pair, and about 37 GB for weights once buffers and a 32K KV cache are paid for.</p>
+<p>The second number is <b>64 GB of RAM</b>, which is <em>more</em> than the VRAM. Every model that fits the cards also fits in RAM with margin, so AIOS reads the weights straight in (<code>--load-mode none</code>) instead of memory‑mapping them — the faster, quieter default on Arc. It also means the CPU side has room for a KV spill or a second small model without swapping.</p>
+<div class="callout info">Backend choice: <b>SYCL</b> (Intel's oneAPI backend) for dense models and anything split across both cards, <b>Vulkan</b> when you want MoE with several parallel slots and no toolkit. AIOS auto‑picks SYCL once oneAPI ≥ 2025.2 is installed. Everything below assumes SYCL; the Vulkan path is the same runbook minus phase 04 (AIOS adds <code>VK_LOADER_DRIVERS_DISABLE=*radeon*</code> on Vulkan so the Ryzen iGPU's driver stays out of the way).</div>
+
+<h2 id="p1">01 — Hardware and power</h2>
+<p>The X670E‑Creator has two PCIe 5.0 x16 slots on CPU lanes that run x16/x0 with one card or <b>x8/x8 with two</b>. The B60 is only x8 electrical, so a card in each of the two CPU slots gets its full Gen5 x8 — nothing is lost to the split. The third slot is a chipset slot at x2 that is disabled by default; never put a GPU there.</p>
+<div class="topo">
+  <div class="slot gpu"><div class="n">PCIEX16_1 · CPU</div><div class="w">B60 #0</div>Gen5 x8</div>
+  <div class="slot gpu"><div class="n">PCIEX16_2 · CPU</div><div class="w">B60 #1</div>Gen5 x8</div>
+  <div class="slot"><div class="n">PCIEX16_3 · chipset</div>x2, off by default — not for a GPU</div>
+  <div class="slot"><div class="n">M.2_1 / M.2_2 · CPU</div>Gen5 x4 — models folder here</div>
+  <div class="slot"><div class="n">M.2_3 / M.2_4 · chipset</div>Gen4 x4 (M.2_3 drops to x2 if PCIEX16_3 is enabled)</div>
+</div>
+<p>M.2_1 and M.2_2 hang off the CPU separately and take nothing from the GPU slots, so NVMe for the models folder is free. Power: two cards at their 200 W ceiling plus a 9950X3D under load is about 650 W — an 850–1000 W PSU with a dedicated 8‑pin (or 12V‑2x6, depending on the partner card) lead to each card, no pigtails. Two open‑fan cards sit two slots apart on this board, which is enough airflow; a blower‑style B60 doesn't care. The B60 throttles quietly rather than crashing when hot, which shows up as decode speed that drifts down over a long run.</p>
+<div class="gate"><b>Gate 01:</b> the board POSTs with both cards seated, the Q‑LED stays off, and the BIOS main page shows two PCIe devices on the CPU slots at x8.</div>
+
+<h2 id="p2">02 — BIOS</h2>
+<p>This is the phase that bites — you have already seen it on the Z890 board: a BIOS update resets these to defaults, and the symptom is a card silently missing from Device Manager (or present with <b>Code 12</b>, "not enough free resources"). Two 24 GB BARs cannot be mapped below 4 GB, so the first setting is mandatory.</p>
+<div class="tw"><table>
+<tr><th>Setting</th><th>Value</th><th>Why</th></tr>
+<tr><td>Advanced → PCI Subsystem Settings → <b>Above 4G Decoding</b></td><td>Enabled</td><td>Lets the firmware place 24 GB BARs above the 4 GB line. Without it a card drops out or gets Code 12.</td></tr>
+<tr><td>Advanced → PCI Subsystem Settings → <b>Re‑Size BAR Support</b></td><td>Enabled / Auto</td><td>Full‑VRAM BAR; Intel Graphics Software reports ReBAR off otherwise, and SYCL allocation is much slower.</td></tr>
+<tr><td>Boot → <b>CSM (Compatibility Support Module)</b></td><td>Disabled</td><td>ReBAR needs a pure UEFI boot.</td></tr>
+<tr><td>Advanced → Onboard Devices → <b>PCIEX16_1 / PCIEX16_2 Link Speed</b></td><td>Auto (Gen5)</td><td>Gen5 x8 per card. If a card trains unreliably (random drop‑outs, x4 or x1 after a warm boot), force Gen4 — the B60 loses nothing meaningful at Gen4 x8.</td></tr>
+<tr><td>Advanced → Onboard Devices → <b>PCIEX16_3 Slot</b></td><td>Disabled (default)</td><td>Enabling it halves M.2_3; it's x2 and useless for a GPU anyway.</td></tr>
+<tr><td>Advanced → AMD CBS → NBIO → <b>IOMMU</b></td><td>Enabled</td><td>Harmless on bare‑metal Windows; needed if this box ever runs WSL/Hyper‑V GPU passthrough.</td></tr>
+<tr><td>Advanced → AMD CBS → <b>Integrated Graphics</b></td><td>Auto</td><td>Leave the Ryzen iGPU on for a display while the B60s compute; AIOS marks it integrated and never uses it.</td></tr>
+</table></div>
+<p>Menu wording differs a little between ASUS BIOS revisions; the option names are stable even when their menu moves. Save with F10 and cold‑boot (full power‑off) after changing the 4G/ReBAR pair — a warm reboot sometimes keeps the old BAR map.</p>
+<div class="gate"><b>Gate 02:</b> Windows Device Manager lists two <code>Intel(R) Arc(TM) Pro B60 Graphics</code> adapters (plus <code>AMD Radeon(TM) Graphics</code>, the iGPU) with no warning icons, and each B60's Properties → Resources shows a "Large Memory Range" spanning roughly 24 GB.</div>
+
+<h2 id="p3">03 — Windows 11 and the Intel driver</h2>
+<ol class="steps">
+  <li><b>Edition.</b> Windows 11 Pro. Apply all cumulative updates and the AMD chipset driver before the Arc driver.</li>
+  <li><b>Driver.</b> Install the current <b>Intel Arc Pro</b> WHQL graphics driver from intel.com (the Pro branch, not the consumer Arc package). Reboot. The build log in phase 05 needs driver ≥ 32.0.101.6xxx; the box you tested earlier had 32.0.101.8805, which is fine.</li>
+  <li><b>ReBAR check.</b> Open Intel Graphics Software → System → each GPU should show <em>Resizable BAR: Enabled</em>. If one card says Disabled, go back to phase 02 — it is never a driver problem.</li>
+  <li><b>Power plan.</b> Set the plan to High performance / Ultimate and disable sleep and disk idle; a sleeping host with 80 GB of weights mapped does not resume cleanly.</li>
+  <li><b>Defender exclusion.</b> Exclude <code>C:\AIOS\models</code> and <code>C:\AIOS\bin</code>; real‑time scanning of a 60 GB GGUF on every open is measurable.</li>
+  <li><b>LAN access (optional).</b> Start AIOS with <code>--host 0.0.0.0</code> if other machines (OpenCode, Open WebUI, the latency monitor) should reach the GUI and llama-server.</li>
+</ol>
+<pre><code><span class="c"># PowerShell (admin) - both cards, real VRAM, driver version, and any error codes</span>
+Get-CimInstance Win32_VideoController | Select Name, DriverVersion, Status
+pnputil /enum-devices /class Display /problem
+<span class="c"># Real VRAM (Win32 AdapterRAM caps at 4 GB; the registry has the true QWORD)</span>
+Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}' |
+  Get-ItemProperty | ? DriverDesc -match 'Arc' |
+  Select DriverDesc, @{n='VRAM_GB';e={[math]::Round($_.'HardwareInformation.qwMemorySize'/1GB,1)}}</code></pre>
+<div class="gate"><b>Gate 03:</b> the registry query prints two Arc rows at ≈24 GB, <code>pnputil</code> lists no problem devices, and Intel Graphics Software shows ReBAR enabled on both.</div>
+
+<h2 id="p4">04 — Toolchain (oneAPI ≥ 2025.2 is not optional)</h2>
+<p>llama.cpp's SYCL flash‑attention kernels reference the <code>intel_gpu_bmg_g31</code> architecture enum, which only exists in the DPC++ compiler from oneAPI <b>2025.2</b> onward. The 2025.1 that winget ships fails at compile time with <em>"no member named 'intel_gpu_bmg_g31'"</em>. <code>build-llama.ps1</code> checks the installed version and, if it's missing or too old, downloads Intel's <b>Deep Learning Essentials</b> 2026.1 offline installer (~2 GB: DPC++, oneMKL, oneDNN, oneDPL) and runs it silently — expect a UAC prompt and 10–20 minutes. Everything else (Git, CMake, Ninja, VS Build Tools with the C++ workload) comes from winget with <code>--source winget</code>, which sidesteps the msstore certificate failure you hit on the Z890 box.</p>
+<pre><code><span class="c"># Manual alternative, if you'd rather pre-install before the first build</span>
+winget install --id Git.Git -e --source winget
+winget install --id Kitware.CMake -e --source winget
+winget install --id Ninja-build.Ninja -e --source winget
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --source winget --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+<span class="c"># Intel Deep Learning Essentials (2026.1): download from intel.com/oneapi, then</span>
+.\intel-deep-learning-essentials-2026.1.3.20_offline.exe -a --silent --eula accept -p=NEED_VS2022_INTEGRATION=0
+
+<span class="c"># Verify: both cards visible to Level Zero</span>
+&amp; "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" intel64
+sycl-ls</code></pre>
+<pre><code><span class="c"># Expected (order may differ)</span>
+[level_zero:gpu][level_zero:0] Intel(R) oneAPI Unified Runtime over Level-Zero, Intel(R) Arc(TM) Pro B60 Graphics 20.1.0 [1.15.xxxxx]
+[level_zero:gpu][level_zero:1] Intel(R) oneAPI Unified Runtime over Level-Zero, Intel(R) Arc(TM) Pro B60 Graphics 20.1.0 [1.15.xxxxx]
+[opencl:gpu][opencl:0..1]      Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Pro B60 Graphics OpenCL 3.0 NEO</code></pre>
+<div class="gate"><b>Gate 04:</b> <code>icx --version</code> reports 2025.2 or newer and <code>sycl-ls</code> lists two <code>level_zero:gpu</code> entries. One means a card lost its BAR (phase 02); zero means the driver (phase 03). The AMD iGPU never appears here — it isn't a Level Zero device.</div>
+
+<h2 id="p5">05 — AIOS and the build</h2>
+<ol class="steps">
+  <li>Run from <code>C:\code\Work\AIOS</code> (v0.3.6, scripts v6) or copy it to <code>C:\AIOS</code>. Only <code>aios.py</code> is strictly required — it rewrites the four scripts next to itself when they are missing or older than v6.</li>
+  <li>Install Python 3.11+ (<code>winget install --id Python.Python.3.12 -e --source winget</code>). No pip packages are needed.</li>
+  <li>Start it: <code>python aios.py</code> (opens <code>http://localhost:7800</code>).</li>
+  <li>Section 1 should read: Ryzen 9 9950X3D · 64 GB · GPU0–GPU1 Intel Arc Pro B60 20.8 GB (intel/discrete), the Radeon iGPU tagged <em>integrated</em> · backend <span class="pill">auto (sycl)</span>. If it says <em>auto (vulkan)</em>, oneAPI isn't installed yet — that's fine, the build will install it.</li>
+  <li>Section 2: backend <b>auto</b>, branch <b>master</b> (or the newest <code>bNNNNN</code> release for reproducibility), tick <b>clean rebuild</b> the first time, click <b>Build</b>.</li>
+</ol>
+<p>What the log should show, in order:</p>
+<pre><code>==&gt; Detecting hardware
+    CPU : AMD Ryzen 9 9950X3D 16-Core Processor  (16 cores / 32 threads)
+    RAM : 64 GB
+    GPU0: Intel(R) Arc(TM) Pro B60 Graphics  20.8 GB  intel/discrete  driver=32.0.101.xxxx
+    GPU1: Intel(R) Arc(TM) Pro B60 Graphics  20.8 GB  intel/discrete  driver=32.0.101.xxxx
+    GPU2: AMD Radeon(TM) Graphics  0.5 GB  amd/integrated  driver=...
+    SYCL GPUs: Intel(R) Arc(TM) Pro B60 Graphics (20.8 GB), Intel(R) Arc(TM) Pro B60 Graphics (20.8 GB)
+    Total SYCL VRAM: 41.6 GB across 2 card(s) - multi-card serving uses -sm layer; ...
+    Backend: sycl
+==&gt; Checking toolchain
+    MSVC : C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+    oneAPI: C:\Program Files (x86)\Intel\oneAPI  (DPC++ 2026.1)
+==&gt; Configuring
+    icx  : ...\compiler\latest\bin\icx.exe
+    sycl-ls: [level_zero:gpu][level_zero:0] ... B60   (x4)
+    cmake (BoringSSL) ... -DGGML_SYCL=ON -DGGML_SYCL_TARGET=INTEL -DGGML_SYCL_F16=ON -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=icx
+==&gt; Building with 32 threads (this takes a while with CUDA / SYCL)
+    [808/808] ...
+==&gt; Smoke test
+    found 2 SYCL devices ...          <span class="c">&lt;- llama-ls-sycl-device</span>
+    Available devices: SYCL0, SYCL1   <span class="c">&lt;- llama-server --list-devices</span></code></pre>
+<p>A full SYCL build on the 9950X3D takes roughly 10–15 minutes; the oneMKL/oneDNN link steps at the end are single‑threaded and look stalled — they aren't.</p>
+<div class="gate"><b>Gate 05:</b> the smoke test lists two SYCL devices and <code>bin\build-info.json</code> has <code>"backend": "sycl"</code> and two entries under <code>gpus</code>.</div>
+
+<h2 id="p6">06 — Serve</h2>
+<h3>Which model fits</h3>
+<p>The AIOS recommender does this per quant, but the shape of the budget is worth seeing once. Per‑card overhead on SYCL is about 1.2 GB (compute buffers), and the KV cache scales with context.</p>
+<div class="vram">
+  <div class="row"><div>Qwen3.8‑27B Q8_0</div><div class="bar"><span class="m" style="width:70%"></span><span class="kv" style="width:19%"></span><span class="b" style="width:6%"></span></div><div class="t">~29 + 8 + 2.5 GB</div></div>
+  <div class="row"><div>Qwen3.8‑27B UD‑Q4_K_M</div><div class="bar"><span class="m" style="width:37%"></span><span class="kv" style="width:19%"></span><span class="b" style="width:6%"></span></div><div class="t">~15 + 8 + 2.5 GB</div></div>
+  <div class="row"><div>Qwen3.6‑35B‑A3B Q4_K_M</div><div class="bar"><span class="m" style="width:50%"></span><span class="kv" style="width:12%"></span><span class="b" style="width:6%"></span></div><div class="t">~21 + 5 + 2.5 GB</div></div>
+  <div class="row"><div>Qwen3‑Coder‑30B‑A3B UD‑Q4_K_XL</div><div class="bar"><span class="m" style="width:43%"></span><span class="kv" style="width:14%"></span><span class="b" style="width:6%"></span></div><div class="t">~18 + 6 + 2.5 GB</div></div>
+  <div class="row"><div>Llama 3.3 70B IQ3_XXS</div><div class="bar"><span class="m" style="width:67%"></span><span class="kv" style="width:24%"></span><span class="b" style="width:6%"></span></div><div class="t">~28 + 10 + 2.5 GB — tight, low quality</div></div>
+  <div class="legend"><span><i style="background:var(--bar-model)"></i>weights</span><span><i style="background:var(--bar-kv)"></i>KV cache @ 32K</span><span><i style="background:var(--bar-buf)"></i>buffers</span><span><i style="background:var(--bar-free)"></i>free of 41.6 GB</span></div>
+</div>
+<p>Sizes are approximate. The 27B dense at Q8 and the two fast MoEs all fit comfortably at 32K context across the pair; a 70B only fits at 3‑bit with most of the context budget gone, which isn't worth it on this hardware. Start with <b>Qwen3.8‑27B Q8_0</b> (dense, MTP draft head, the AIOS default) or <b>Qwen3.6‑35B‑A3B</b> (the fast MoE you already run).</p>
+<h3>Mode A — one model across both cards</h3>
+<p>In Section 3 leave both GPU boxes ticked, GPU layers 999, KV <b>q4_0</b> (fastest on Battlemage; switch to f16 above ~16K context on SYCL), slots 1. Split: <b>layer</b> for MoE; for dense models try <b>tensor</b> — SYCL's tensor parallelism is tuned for exactly two cards and can beat layer split on decode. Benchmark both (phase 07). The command preview shows what AIOS will run:</p>
+<pre><code>ZES_ENABLE_SYSMAN=1 UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1 llama-server -m models\... --jinja -c 32768 -fa on
+  --cache-type-k q4_0 --cache-type-v q4_0 -b 2048 -ub 2048 -t 16 --host 0.0.0.0 --port 8080 --metrics --load-mode none
+  -ngl 999 -sm layer -mg 0 --parallel 1 [--spec-type draft-mtp --spec-draft-n-max 2]</code></pre>
+<p>For MoE models on SYCL, AIOS switches to <code>-fa off</code> (with the V cache back to f16, since a quantized V cache needs flash‑attention) and sets <code>GGML_SYCL_DISABLE_OPT=1</code>; both came out of your Arc benchmarks. <code>--load-mode none</code> appears because the weights fit in the 64 GB of RAM.</p>
+<h3>Mode B — one model per card</h3>
+<p>The natural two‑card layout for agent work: a general model on card 0 and the coding MoE on card 1, each on its own port. Untick one card, set the port, start; then start a second AIOS instance (or run by hand) for the other card. AIOS pins each process with <code>ONEAPI_DEVICE_SELECTOR=level_zero:N</code> so the servers never see each other's memory.</p>
+<pre><code><span class="c"># By hand, after setvars.bat: card 1 only, on port 8081</span>
+set ONEAPI_DEVICE_SELECTOR=level_zero:1
+set ZES_ENABLE_SYSMAN=1
+set UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1
+bin\llama-server.exe -m models\Qwen3-Coder-30B-A3B-UD-Q4_K_XL.gguf -c 32768 -fa off -ngl 999 -sm none -mg 0 --load-mode none --port 8081 --host 0.0.0.0 --metrics</code></pre>
+<div class="callout">Never start two SYCL servers on the <em>same</em> card; Level Zero doesn't arbitrate memory between processes and the second one fails late, after it has evicted part of the first.</div>
+<div class="gate"><b>Gate 06:</b> the server pill turns <em>ready</em>, the log ends with <code>srv update_slots: all slots are idle</code>, and <code>llama-server --list-devices</code> in the log named the card(s) you expected.</div>
+
+<h2 id="p7">07 — Verify and benchmark</h2>
+<pre><code><span class="c"># From this or any LAN machine</span>
+curl http://localhost:8080/health
+curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"x\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hi in five words.\"}]}"
+curl http://localhost:8080/metrics | findstr tokens_per_second
+
+<span class="c"># llama-bench is a SYCL binary: load the oneAPI environment in a *Command Prompt* first</span>
+"C:\Program Files (x86)\Intel\oneAPI\setvars.bat" intel64
+set ZES_ENABLE_SYSMAN=1
+set UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1
+cd C:\code\Work\AIOS\bin
+llama-bench.exe --list-devices                                   <span class="c">&lt;- SYCL0, SYCL1 expected</span>
+
+<span class="c"># Both cards, layer vs tensor split, 3 runs each</span>
+llama-bench.exe -m ..\models\Qwen3.8-27B-Q8_0.gguf -ngl 99 -sm layer,tensor -mg 0 -fa 1 -ctk q4_0 -ctv q4_0 -ub 2048 -p 512 -n 128 -r 3 -o md
+
+<span class="c"># Same model on one card, to see what the split costs (only quants that fit 20 GB)</span>
+set ONEAPI_DEVICE_SELECTOR=level_zero:0
+llama-bench.exe -m ..\models\Qwen3.8-27B-UD-Q4_K_M.gguf -ngl 99 -sm none -fa 1 -p 512 -n 128 -r 3 -o md
+set ONEAPI_DEVICE_SELECTOR=</code></pre>
+<p>Record <code>pp512</code> (prefill) and <code>tg128</code> (decode) for each model and split mode. A model that fits on one card is usually faster there than split across two (every split adds a PCIe hop); the split earns its keep on the models that don't fit, and on this board <code>tensor</code> is the one to watch for dense models. Your Coding Agent Latency Monitor (port 7900) can point at <code>localhost:8080</code> for TTFT under load.</p>
+<div class="gate"><b>Gate 07:</b> a chat completion returns coherent text (no repeated tokens — that means a stale binary), and <code>llama-bench</code> decode numbers are stable across the three runs (thermal throttling shows as a falling third run).</div>
+
+<h2 id="p8">08 — Tuning knobs that matter on this box</h2>
+<div class="tw"><table>
+<tr><th>Knob</th><th>Start</th><th>Move it when</th></tr>
+<tr><td>Context <code>-c</code></td><td>32768</td><td>KV cache is reserved up front on every card; go to 65K–128K only for long‑document work and drop KV to q4_0 or accept less weights headroom.</td></tr>
+<tr><td>KV cache type</td><td>q4_0</td><td>f16 above ~16K on SYCL (quality drift), q8_0 if a model shows odd punctuation at q4_0.</td></tr>
+<tr><td>Micro‑batch <code>-ub</code></td><td>2048</td><td>Already set by AIOS for Arc (≈+60% prefill). Lower to 512 if a long prompt OOMs on the first card.</td></tr>
+<tr><td>Split <code>-sm</code></td><td>layer (MoE) / tensor (dense)</td><td>Exactly two cards is what SYCL's <code>tensor</code> mode is tuned for; benchmark it per model. <code>row</code> is CUDA‑only.</td></tr>
+<tr><td>Slots <code>--parallel</code></td><td>1</td><td>2–4 for several agents at once; the context window is divided between slots and MTP turns off.</td></tr>
+<tr><td><code>--load-mode</code></td><td>none</td><td>With 64 GB of RAM every model that fits the cards also fits RAM, so AIOS reads the weights in instead of mmapping. (<code>--no-mmap</code> no longer exists on master.)</td></tr>
+<tr><td>Threads <code>-t</code></td><td>16</td><td>Only the un‑offloaded work uses them; on a fully offloaded model 8 is just as fast and leaves the host responsive for the desktop.</td></tr>
+<tr><td>Power / clocks</td><td>driver default</td><td>Intel Graphics Software exposes a power‑limit slider per card on Windows; 150 W each is the usual sweet spot — decode is bandwidth‑bound and barely notices, temps drop a lot.</td></tr>
+</table></div>
+
+<h2 id="ref">Flag and environment reference</h2>
+<div class="tw"><table>
+<tr><th>Name</th><th>Where</th><th>Meaning</th></tr>
+<tr><td><code>ONEAPI_DEVICE_SELECTOR</code></td><td>env</td><td><code>level_zero:0</code> or <code>level_zero:1</code> — which card a SYCL process sees. Indices follow <code>sycl-ls</code> order.</td></tr>
+<tr><td><code>VK_LOADER_DRIVERS_DISABLE=*radeon*</code></td><td>env</td><td>Vulkan builds only: keeps the Ryzen iGPU's driver out of the loader. AIOS sets it when an AMD iGPU is present.</td></tr>
+<tr><td><code>ZES_ENABLE_SYSMAN=1</code></td><td>env</td><td>Free‑memory queries across cards; required for a sane layer split.</td></tr>
+<tr><td><code>UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1</code></td><td>env</td><td>Allows single allocations above 4 GiB (big KV caches, large tensors).</td></tr>
+<tr><td><code>GGML_SYCL_DISABLE_OPT=1</code></td><td>env</td><td>Skip the SYCL optimized path; faster/safer for MoE on Arc.</td></tr>
+<tr><td><code>GGML_SYCL_DEBUG=1</code></td><td>env</td><td>Verbose backend logging when something fails silently.</td></tr>
+<tr><td><code>SYCL_CACHE_PERSISTENT</code></td><td>env</td><td>Leave unset. Known to crash on kernel recompiles; clear <code>%LOCALAPPDATA%\libsycl_cache</code> if it was ever set.</td></tr>
+<tr><td><code>-sm layer -mg 0</code></td><td>args</td><td>Whole layers per card, main GPU 0 for the shared tensors.</td></tr>
+<tr><td><code>-sm none -mg N</code></td><td>args</td><td>Single card N (with the selector above, N is 0).</td></tr>
+<tr><td><code>-fa on|off</code></td><td>args</td><td>Flash attention; off for MoE on SYCL. A quantized V cache requires on.</td></tr>
+<tr><td><code>--spec-type draft-mtp</code></td><td>args</td><td>MTP speculative decoding for models with a draft head (Qwen3.8); slots must be 1.</td></tr>
+<tr><td><code>--list-devices</code></td><td>args</td><td>Prints what this build can see; first thing to run when a card is "missing".</td></tr>
+</table></div>
+
+<h2 id="trouble">Troubleshooting</h2>
+<div class="tw"><table>
+<tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+<tr><td>A card vanished from Device Manager after a BIOS update; or Code 12</td><td>Above 4G Decoding / ReBAR reset to defaults</td><td>Phase 02, then a cold boot. Reseat the card if it's still gone.</td></tr>
+<tr><td>Intel Graphics Software says ReBAR disabled on one card</td><td>Same as above, or CSM re‑enabled</td><td>Phase 02; confirm UEFI boot mode.</td></tr>
+<tr><td><code>no member named 'intel_gpu_bmg_g31'</code> during build</td><td>oneAPI DPC++ 2025.1 (winget's version)</td><td>Let the build script install Deep Learning Essentials 2026.1, or install it by hand; re‑run with clean rebuild.</td></tr>
+<tr><td><code>sycl-ls</code> shows 1 (or 0) Level Zero GPUs</td><td>BAR mapping (1) or driver not loaded (0)</td><td>Phase 02 / phase 03; reseat the card if the settings are right.</td></tr>
+<tr><td>A card runs at x4 / x1, or drops out under load</td><td>Gen5 link training on a long slot or riser</td><td>Force the slot Link Speed to Gen4 in BIOS; no loss at x8.</td></tr>
+<tr><td>Start server does nothing: pill stays <em>stopped</em>, log stays <em>idle</em>, test prompt gets <code>WinError 10061</code></td><td>llama‑server died in milliseconds with no output — before AIOS 0.3.4 that was invisible. On a SYCL build the cause was the oneAPI environment import silently failing (a cmd.exe quoting bug), so <code>sycl8.dll</code> was never on PATH; a bare <code>--</code> in Extra flags does the same with an argument error.</td><td>Update to aios.py 0.3.4: the import is fixed, the start call now reports "exited immediately (code …)" with a hint, and <code>-- temp 1.0</code> is normalised to <code>--temp 1.0</code>. By hand: run <code>bin\llama-server.exe --list-devices</code> from a shell after <code>setvars.bat</code> to see the loader error.</td></tr>
+<tr><td><code>llama-server.exe</code> exits at once: missing <code>sycl8.dll</code> / <code>mkl_*.dll</code></td><td>Launched without the oneAPI environment</td><td>Start it through AIOS (it imports setvars) or run <code>setvars.bat intel64</code> in that shell first.</td></tr>
+<tr><td><code>failed to get device memory size</code> or wildly wrong free‑VRAM in the log</td><td><code>ZES_ENABLE_SYSMAN</code> unset</td><td>AIOS sets it; set it by hand for manual runs.</td></tr>
+<tr><td>Allocation fails around 4 GiB with plenty of VRAM free</td><td>Level Zero allocation limit</td><td><code>UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1</code>.</td></tr>
+<tr><td>Model load takes a long time, disk at 100%</td><td>Models folder on a slow disk or a Defender scan on every open</td><td>Keep models on M.2_1/M.2_2 and exclude the folder from real‑time scanning.</td></tr>
+<tr><td>Garbage / repeated tokens</td><td>Stale binary on PATH, or a quant that needs a newer llama.cpp</td><td>Confirm you're running <code>C:\AIOS\bin\llama-server.exe</code>; rebuild on master.</td></tr>
+<tr><td>Decode speed falls off over a long session</td><td>Thermal throttling</td><td>More chassis airflow, or a 150 W power cap per card in Intel Graphics Software.</td></tr>
+<tr><td>winget: <code>0x8a15005e</code> server certificate did not match</td><td>msstore source behind TLS inspection</td><td>The scripts pass <code>--source winget</code>; or <code>winget source remove msstore</code>.</td></tr>
+<tr><td>Second server on the same card dies late with an allocation error</td><td>Two SYCL processes sharing one card</td><td>One process per card; use the device selector.</td></tr>
+</table></div>
+<p style="color:var(--muted);font-size:.85rem;margin-top:3rem">Companion files: <code>C:\code\Work\AIOS</code> (aios.py 0.3.6, build‑llama.ps1 v6, README "Machine profile: 2x Arc Pro B60 on ProArt X670E‑Creator"). Sibling runbooks: <em>Four B60 Battlematrix Build</em> (the earlier ROMED8‑2T plan), <em>Qwen3.8‑27B on Dual 5060 Ti</em>, <em>Arc Pro B60/B70 on Ubuntu</em>. Expected‑output blocks are targets, not transcripts, until the first full run on this board.</p>
+</main>
+</div>
+</body>
+</html>

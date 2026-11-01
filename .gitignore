@@ -1,0 +1,11 @@
+# llama.cpp source + build tree, binaries, models, app state
+llama.cpp/
+bin/
+models/
+aios-state.json
+*.part
+*.bak
+__pycache__/
+bench-results.json
+*.parts.json
+bench-*.json
