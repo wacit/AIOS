@@ -136,6 +136,14 @@ Only the 16 full layers hold KV cache, so context is cheap: about **64 KB/token 
   mode temp 1.0 / top_p 0.95 / top_k 20; coding temp 0.6 (Extra flags).
 * BIOS: Above 4G Decoding + Re-Size BAR on, CSM off; five 24 GB BARs need it just like Arc. PSU: 5 x 180 W + CPU ~ 1.2 kW.
 
+## Machine-aware model picks and LAN access (v0.4.2)
+* The model catalog is ranked for the detected hardware: each model shows the quant tier that fits, on how many of
+  your cards (or "experts in RAM" for MoE larger than VRAM), with a "best for this machine" badge. Re-ranks when
+  context / KV / priority / GPU selection change. Sizes are estimates from parameter count until a repo is opened.
+* When llama-server is bound to 0.0.0.0 the Serve section lists the machine's LAN addresses with the `/v1` endpoint,
+  a browser-chat link per address, agent config snippets (OpenCode, Continue/Cline/Roo, dsh, Open WebUI, generic
+  OPENAI_BASE_URL; Claude Code needs an OpenAI->Anthropic router) and a one-click Windows Firewall rule for the port.
+
 ## Benchmark (section 4, v0.4.0+)
 * Pick a local GGUF; the tool sweeps settings with `bin\llama-bench` on the detected cards (all of them in parallel when
   there is more than one): split mode (layer vs tensor on SYCL / row on CUDA), flash attention, KV cache type,

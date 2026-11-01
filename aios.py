@@ -33,7 +33,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-APP_VERSION = "0.4.1"
+APP_VERSION = "0.4.2"
 SCRIPTS_VERSION = 6   # bump when the embedded build/launch scripts change
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BIN_DIR = os.path.join(ROOT, "bin")
@@ -72,7 +72,7 @@ CATALOG = [
      "max_ctx": 262144, "mtp": False, "vision": True, "draft_repo": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
      "blurb": "Fast hybrid MoE with a tiny KV cache. UD-Q4_K_XL ~22 GB fits on two 16 GB cards; MTP draft head ships as a separate GGUF."},
     {"id": "qwen3.8-flash-next", "name": "Qwen3.8-Flash-Next", "repo": "unsloth/Qwen3.8-Flash-Next-GGUF",
-     "params_b": 125, "arch": "MoE hybrid (6B active; Gated DeltaNet + sparse attention, 512 experts, 51B n-gram embedding)", "kv_kb_per_token": 24,
+     "params_b": 177, "arch": "MoE hybrid (125B LM + 51B n-gram embedding, 6B active; Gated DeltaNet + sparse attention, 512 experts)", "kv_kb_per_token": 24,
      "max_ctx": 262144, "mtp": False, "vision": True, "draft_repo": "unsloth/Qwen3.8-Flash-Next-GGUF",
      "blurb": "Experimental 125B/6B-active MoE. UD-Q4_K_XL is 111 GB: needs experts in system RAM (--n-cpu-moe) on any consumer GPU box; MTP draft is a separate GGUF in the same repo."},
     {"id": "qwen3-coder-30b-a3b", "name": "Qwen3-Coder-30B-A3B", "repo": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
@@ -569,6 +569,70 @@ def recommend(hw, entry, quants, ctx=65536, kv="q8_0", priority="speed"):
     return {"best": best["tag"] if best else None, "cpu_fallback": cpu_fallback["tag"] if cpu_fallback else None,
             "budget_gb": round(budget, 1), "kv_gb": round(kv_gb, 2), "overhead_gb": round(overhead, 1),
             "priority": priority, "fits": [q["tag"] for q in by_quality], "offload": offload}
+
+
+# bytes per weight for the quant tiers the catalog recommends from (GGUF typical, incl. overhead)
+QUANT_TIERS = [("Q8_0", 1.07), ("Q6_K", 0.83), ("Q5_K_M", 0.72), ("UD-Q4_K_XL", 0.63), ("Q4_K_M", 0.60), ("IQ4_XS", 0.54),
+               ("UD-Q3_K_XL", 0.50), ("IQ3_XXS", 0.41), ("UD-Q2_K_XL", 0.36)]
+
+
+def recommend_models(hw, ctx=32768, kv="q8_0", priority="speed"):
+    """Rank the catalog for THIS machine: which quant tier fits, on how many of the detected cards, or only with MoE
+    experts in RAM. Sizes are estimated from params_b (the quant table uses real file sizes once a repo is opened)."""
+    use = hw.get("compute_gpus") or []
+    ncards = len(use)
+    per_card = min([g["vram_gb"] for g in use] or [0])
+    vram = hw.get("vram_total_gb") or 0
+    ram = (hw.get("ram") or {}).get("total_gb") or 0
+    be = hw.get("backend")
+    factor = 0.90 if be == "sycl" else 0.94
+    kv_factor = {"f16": 1.0, "q8_0": 0.5, "q4_0": 0.25}.get(kv, 0.5)
+    out = []
+    for c in CATALOG:
+        moe = "moe" in (c.get("arch") or "").lower()
+        kv_gb = c["kv_kb_per_token"] * ctx * kv_factor / (1024 ** 2)
+        verdict = None
+        for tag, bpw in QUANT_TIERS:
+            size = c["params_b"] * bpw
+            if priority == "speed" and tag in ("Q8_0", "Q6_K", "Q5_K_M") and c["params_b"] * 0.63 + kv_gb + 1.2 <= vram * factor:
+                continue   # speed priority: prefer the 4-bit tier when it fits
+            # fewest cards that hold it (layer split): buffers 1.2 GB per card
+            for n in range(1, ncards + 1):
+                if size + kv_gb + 1.2 * n <= per_card * n * factor:
+                    verdict = {"tag": tag, "size_gb": round(size, 1), "cards": n, "mode": "single card" if n == 1 else f"layer split over {n} of {ncards}",
+                               "fit": "fits", "rank": 0 if n == 1 else 1}
+                    break
+            if verdict:
+                break
+        if moe and ncards and (not verdict or quant_bits(verdict["tag"]) < 4):
+            # MoE: a 4-bit tier with experts in RAM beats a 2/3-bit tier squeezed onto the cards
+            gpu_verdict = verdict
+            verdict = None
+            for tag, bpw in QUANT_TIERS:
+                if priority == "speed" and quant_bits(tag) > 4:
+                    continue   # experts stream from RAM: smaller tiers are faster, 4-bit is the quality floor worth paying for
+                size = c["params_b"] * bpw
+                in_ram = size + kv_gb + 1.2 * ncards - vram * factor
+                if in_ram <= ram * 0.6:
+                    verdict = {"tag": tag, "size_gb": round(size, 1), "cards": ncards, "mode": f"experts in RAM (~{max(1, int(in_ram))} GB, --n-cpu-moe)",
+                               "fit": "offload", "rank": 2}
+                    break
+            if gpu_verdict and (not verdict or quant_bits(verdict["tag"]) <= quant_bits(gpu_verdict["tag"])):
+                verdict = gpu_verdict
+        if not verdict:
+            size = c["params_b"] * QUANT_TIERS[-1][1]
+            verdict = {"tag": None, "size_gb": round(size, 1), "cards": 0, "mode": "does not fit this machine", "fit": "none", "rank": 3}
+        # order: fits > experts-in-RAM > too big; speed priority keeps models that leave cards free ahead of ones that
+        # need (nearly) every card; then the most capable model first, MoE ahead of dense at equal size for speed
+        frac = verdict["cards"] / ncards if ncards else 1
+        verdict["sort"] = ({"fits": 0, "offload": 1, "none": 2}[verdict["fit"]],
+                           1 if (priority == "speed" and verdict["fit"] == "fits" and frac > 0.6 and ncards >= 3) else 0,
+                           -c["params_b"], 0 if moe else 1)
+        out.append(dict(c, verdict=verdict, moe=moe))
+    out.sort(key=lambda c: c["verdict"]["sort"])
+    if out and out[0]["verdict"]["fit"] == "fits":
+        out[0]["verdict"]["best"] = True
+    return out
 
 
 def model_size_gb(model_path):
@@ -1486,6 +1550,41 @@ class Server:
 SERVER = Server()
 
 
+def lan_addresses():
+    """IPv4 addresses of this machine (per interface), hostname first. Best effort, no third-party modules."""
+    addrs = []
+    try:
+        host = socket.gethostname()
+        for info in socket.getaddrinfo(host, None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127.") and ip not in addrs:
+                addrs.append(ip)
+    except Exception:
+        pass
+    try:   # the interface that routes to the LAN/default gateway comes first
+        sck = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sck.connect(("10.255.255.255", 1))
+        ip = sck.getsockname()[0]; sck.close()
+        if not ip.startswith("127.") and ip in addrs:
+            addrs.remove(ip)
+        if not ip.startswith("127."):
+            addrs.insert(0, ip)
+    except Exception:
+        pass
+    return {"hostname": socket.gethostname(), "ips": addrs}
+
+
+def firewall_allow(port, name):
+    """Windows: open an inbound TCP port (prompts for elevation). Returns (ok, message)."""
+    if not IS_WIN:
+        return False, "only needed on Windows (use ufw/firewalld on Linux)"
+    rule = f"AIOS {name} {port}"
+    ps = (f"Start-Process netsh -Verb RunAs -Wait -ArgumentList 'advfirewall','firewall','add','rule',"
+          f"'name=\"{rule}\"','dir=in','action=allow','protocol=TCP','localport={port}','profile=private,domain'")
+    rc, out, err = run(["powershell", "-NoProfile", "-Command", ps], timeout=120)
+    return rc == 0, (err or out or "rule added (if you approved the UAC prompt)")
+
+
 def free_disk_gb(path):
     try:
         return gb(shutil.disk_usage(path).free)
@@ -1590,7 +1689,9 @@ class Handler(BaseHTTPRequestHandler):
                                 "error": rels.get("error") if isinstance(rels, dict) else None,
                                 "releases_url": f"https://github.com/{LLAMA_REPO}/releases"})
             elif p == "/api/catalog":
-                self.send_json({"catalog": CATALOG})
+                hw = detect_all(q.get("backend", [None])[0], gpu_selection_arg=q.get("gpus", [None])[0])
+                self.send_json({"catalog": recommend_models(hw, int(q.get("ctx", ["32768"])[0]), q.get("kv", ["q8_0"])[0], q.get("priority", ["speed"])[0]),
+                                "machine": {"vram_total_gb": hw["vram_total_gb"], "cards": len(hw.get("compute_gpus") or []), "ram_gb": hw["ram"]["total_gb"], "backend": hw["backend"]}})
             elif p == "/api/hf/files":
                 repo = q.get("repo", [""])[0].strip().strip("/")
                 if not re.match(r"^[\w.-]+/[\w.-]+$", repo):
@@ -1642,6 +1743,13 @@ class Handler(BaseHTTPRequestHandler):
                 light = [{k: v for k, v in r.items() if k != "prompts"} | {"prompt_count": len(r.get("prompts", [])),
                           "avg_score": r.get("avg_score")} for r in runs]
                 self.send_json({"runs": light, "prompts": bench_prompts()})
+            elif p == "/api/net":
+                st = SERVER.status()
+                self.send_json({**lan_addresses(), "aios_port": self.server.server_address[1],
+                                "aios_bind": getattr(self.server, "bind_host", "127.0.0.1"),
+                                "server_port": st["port"], "server_running": st["running"],
+                                "server_bind": (st["args"][st["args"].index("--host") + 1] if "--host" in (st["args"] or []) else None),
+                                "model": os.path.basename(st["model"]) if st.get("model") else None})
             elif p == "/api/state":
                 self.send_json(load_state())
             else:
@@ -1742,6 +1850,9 @@ class Handler(BaseHTTPRequestHandler):
                                             "rubric": pr.get("rubric") or "Does the output fully and correctly satisfy the task?"})
                 bench_save(d)
                 self.send_json({"prompts": bench_prompts()})
+            elif p == "/api/net/firewall":
+                ok, msg = firewall_allow(int(body.get("port") or 8080), body.get("name") or "llama-server")
+                self.send_json({"ok": ok, "message": msg})
             elif p == "/api/server/stop":
                 SERVER.stop()
                 self.send_json(SERVER.status())
@@ -2933,6 +3044,9 @@ input[type=text]{min-width:16rem}
 .card .r{font-size:.75rem;color:var(--muted);font-family:"IBM Plex Mono",monospace;overflow-wrap:anywhere}
 .card .b{font-size:.82rem;color:var(--ink-2)}
 .card .tags{display:flex;gap:.3rem;flex-wrap:wrap}
+.card .fit{font-size:.8rem;font-weight:600;padding:.2rem .5rem;border-radius:5px;background:var(--surface-2)}
+.card .fit.ok{color:var(--ok);background:var(--ok-soft)}.card .fit.warn{color:var(--warn);background:var(--warn-soft)}.card .fit.crit{color:var(--crit);background:var(--crit-soft)}
+.card.dim{opacity:.6}
 .tag{font-size:.68rem;padding:.1rem .4rem;border-radius:4px;background:var(--surface-2);color:var(--ink-2)}
 table{border-collapse:collapse;width:100%;font-size:.88rem;margin-top:.9rem}
 th,td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -3022,6 +3136,7 @@ textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-rad
     <!-- 2 model -->
     <section class="panel">
       <h2><span class="n">2</span>Pick and download a model <span class="pill" id="pill-dl">idle</span></h2>
+      <div class="note" id="catalog-note" style="display:none"></div>
       <div class="models" id="catalog"></div>
       <div class="row">
         <div class="field" style="flex:1"><label>Or any Hugging Face GGUF repo<i class="info" tabindex="0" data-tip="owner/name of a Hugging Face repository containing .gguf files (e.g. unsloth/Qwen3.8-27B-GGUF). AIOS lists every quant in it with its real size and marks the ones that fit your VRAM. Set HF_TOKEN in the environment for gated repos."></i></label><input type="text" id="repo" placeholder="owner/Model-GGUF"></div>
@@ -3081,7 +3196,17 @@ textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-rad
         <button class="btn danger" id="btn-stop" disabled>Stop</button>
       </div>
       <div class="note mono" id="s-cmd"></div>
-      <div class="endpoint" id="endpoint" hidden>OpenAI endpoint: <code id="ep-url"></code> <a id="ep-ui" target="_blank" rel="noopener">built-in chat UI</a> · <a id="ep-metrics" target="_blank" rel="noopener">metrics</a></div>
+      <div class="endpoint" id="endpoint" hidden>
+        <div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap"><b>Access the running model</b><span class="spacer"></span>
+          <a id="ep-ui" class="btn" target="_blank" rel="noopener">Open chat in browser</a><a id="ep-metrics" target="_blank" rel="noopener" style="font-size:.85rem">metrics</a></div>
+        <div id="lan-list" style="margin-top:.5rem;font-size:.9rem"></div>
+        <div id="lan-note" class="note" style="margin:.5rem 0 0"></div>
+        <details style="margin-top:.5rem"><summary style="cursor:pointer;font-size:.88rem">Connect a coding agent (OpenAI-compatible)</summary>
+          <div class="row" style="margin-top:.4rem"><div class="field"><label>Agent</label><select id="agent-kind"><option value="opencode">OpenCode</option><option value="claude">Claude Code (via OpenAI-compatible router)</option><option value="continue">Continue / Cline / Roo</option><option value="dsh">DeepSeek Harness (dsh)</option><option value="openwebui">Open WebUI</option><option value="env">Generic: OPENAI_BASE_URL</option></select></div>
+          <div class="field"><label>Address</label><select id="agent-addr"></select></div><button class="btn" id="agent-copy">Copy</button></div>
+          <pre id="agent-snippet" style="margin:.4rem 0 0;font-size:.78rem"></pre>
+        </details>
+      </div>
       <div class="log" id="log-srv"></div>
       <div class="row"><div class="field" style="flex:1"><label>Test prompt<i class="info" tabindex="0" data-tip="Sends one chat completion to the running server through AIOS and shows the reply with tokens/s for generation and prompt processing."></i></label><textarea id="prompt">Explain what an MTP draft head does in two sentences.</textarea></div><button class="btn" id="btn-test">Send</button></div>
       <div class="answer" id="answer" hidden></div>
@@ -3148,6 +3273,63 @@ function stream(url,el,onDone){
   return es;
 }
 function setPill(id,text,cls){const p=$(id);p.textContent=text;p.className='pill '+(cls||'');}
+
+/* ---------- LAN access ---------- */
+let NET=null;
+async function loadNet(){
+  try{NET=await api('/api/net');}catch{return;}
+  const port=NET.server_port,lan=NET.server_bind==='0.0.0.0';
+  const addrs=lan?[...NET.ips.map(ip=>`http://${ip}:${port}`),`http://${NET.hostname}:${port}`]:[`http://127.0.0.1:${port}`];
+  $('#lan-list').innerHTML=addrs.map(a=>`<div style="display:flex;gap:.6rem;align-items:center;margin:.15rem 0"><code>${esc(a)}/v1</code><button class="btn" data-copy="${esc(a)}/v1" style="padding:.1rem .5rem;font-size:.75rem">copy</button><a href="${esc(a)}/" target="_blank" rel="noopener" style="font-size:.8rem">chat</a></div>`).join('');
+  $('#lan-list').querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(b.dataset.copy);toast('Copied');});
+  if(lan){$('#lan-note').innerHTML=`Reachable from other machines on your network (bound to 0.0.0.0). If a client gets <i>connection refused</i>, Windows Firewall is usually blocking the port: <button class="btn" id="fw-btn" style="padding:.1rem .5rem;font-size:.75rem">Allow port ${port} inbound</button> (asks for admin).${NET.aios_bind!=='0.0.0.0'?` The AIOS page itself is local-only; start it with <code>--host 0.0.0.0</code> to reach it from the LAN too.`:''}`;
+    $('#fw-btn').onclick=async()=>{try{const r=await post('/api/net/firewall',{port,name:'llama-server'});toast(r.ok?'Firewall rule added':r.message);}catch(e){toast(e.message);}};}
+  else{$('#lan-note').innerHTML=`Bound to 127.0.0.1: only this computer can reach the model. Set <b>Bind</b> to 0.0.0.0 and restart the server to use it from agents on other machines.`;}
+  const sel=$('#agent-addr');sel.innerHTML=addrs.map(a=>`<option>${esc(a)}</option>`).join('');renderAgent();
+}
+function renderAgent(){
+  if(!NET)return;const base=$('#agent-addr').value+'/v1',model=NET.model||'local',kind=$('#agent-kind').value;let t='';
+  if(kind==='opencode')t=`// ~/.config/opencode/opencode.json  (Windows: %USERPROFILE%\\.config\\opencode\\opencode.json)
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "aios": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AIOS llama-server",
+      "options": { "baseURL": "${base}", "apiKey": "none" },
+      "models": { "${model}": { "name": "${model}" } }
+    }
+  },
+  "model": "aios/${model}"
+}`;
+  else if(kind==='claude')t=`# Claude Code talks the Anthropic API, so put an OpenAI->Anthropic router in front of llama-server,
+# e.g. claude-code-router (npm i -g @musistudio/claude-code-router) with this provider:
+#   { "name": "aios", "api_base_url": "${base}/chat/completions", "api_key": "none", "models": ["${model}"] }
+# then:  ccr code
+# (Without a router, Claude Code cannot use an OpenAI-compatible endpoint.)`;
+  else if(kind==='continue')t=`# Continue (~/.continue/config.yaml) - Cline/Roo: pick "OpenAI Compatible", same Base URL / model
+models:
+  - name: ${model}
+    provider: openai
+    apiBase: ${base}
+    apiKey: none
+    model: ${model}
+    roles: [chat, edit, apply, autocomplete]`;
+  else if(kind==='dsh')t=`# dsh (DeepSeek Harness): add a custom OpenAI-compatible provider
+dsh provider add aios --type openai --base-url ${base} --api-key none --model ${model}
+dsh --provider aios`;
+  else if(kind==='openwebui')t=`# Open WebUI -> Admin Settings -> Connections -> OpenAI API
+URL:  ${base}
+Key:  none
+# models appear automatically as "${model}"`;
+  else t=`# any OpenAI SDK / tool
+set OPENAI_BASE_URL=${base}
+set OPENAI_API_KEY=none
+# model name: ${model}`;
+  $('#agent-snippet').textContent=t;
+}
+$('#agent-kind').onchange=renderAgent;$('#agent-addr').onchange=renderAgent;
+$('#agent-copy').onclick=()=>{navigator.clipboard.writeText($('#agent-snippet').textContent);toast('Copied');};
 
 /* ---------- benchmark ---------- */
 let BENCH_PROMPTS=[], BENCH_RUNS=[];
@@ -3279,9 +3461,13 @@ async function loadReleases(){
 }
 function branchValue(){const v=$('#branch-sel').value;return v==='__custom'?$('#branch').value.trim():v;}
 async function loadCatalog(){
-  const j=await api('/api/catalog');CATALOG=j.catalog;
-  $('#catalog').innerHTML=CATALOG.map(c=>`<div class="card" data-repo="${esc(c.repo)}"><div class="t">${esc(c.name)}</div><div class="r">${esc(c.repo)}</div><div class="b">${esc(c.blurb)}</div>
-    <div class="tags"><span class="tag">${esc(c.arch)}</span>${c.mtp?'<span class="tag">MTP</span>':''}${c.vision?'<span class="tag">vision</span>':''}<span class="tag">${c.kv_kb_per_token} KB/tok KV</span></div></div>`).join('');
+  const qs=HW?`?backend=${HW.backend}&gpus=${encodeURIComponent(selectedGpus())}&ctx=${$('#ctx').value}&kv=${$('#kv').value}&priority=${$('#prio').value}`:'';
+  const j=await api('/api/catalog'+qs);CATALOG=j.catalog;const m=j.machine;
+  $('#catalog-note').style.display='';$('#catalog-note').textContent=m?`Ranked for this machine: ${m.cards} ${m.backend.toUpperCase()} card${m.cards===1?'':'s'}, ${m.vram_total_gb} GB VRAM, ${m.ram_gb} GB RAM, ${$('#ctx').value} context, ${$('#prio').value} priority. Sizes are estimates until you open a model.`:'';
+  $('#catalog').innerHTML=CATALOG.map(c=>{const v=c.verdict||{};const cls=v.fit==='fits'?'ok':v.fit==='offload'?'warn':'crit';
+    return `<div class="card ${v.fit==='none'?'dim':''}" data-repo="${esc(c.repo)}"><div class="t">${esc(c.name)}${v.best?' <span class="pill ok" style="font-size:.65rem">best for this machine</span>':''}</div><div class="r">${esc(c.repo)}</div><div class="b">${esc(c.blurb)}</div>
+    <div class="fit ${cls}">${v.tag?`<b>${esc(v.tag)}</b> ~${v.size_gb} GB · ${esc(v.mode)}`:`~${v.size_gb} GB even at 2-bit · ${esc(v.mode)}`}</div>
+    <div class="tags"><span class="tag">${esc(c.arch)}</span>${c.mtp?'<span class="tag">MTP</span>':''}${c.draft_repo?'<span class="tag">MTP draft file</span>':''}${c.vision?'<span class="tag">vision</span>':''}<span class="tag">${c.kv_kb_per_token} KB/tok KV</span></div></div>`;}).join('');
   document.querySelectorAll('.card').forEach(el=>el.onclick=()=>{$('#repo').value=el.dataset.repo;listQuants();});
 }
 async function listQuants(){
@@ -3360,7 +3546,7 @@ async function pollServer(){
     setPill('#pill-srv',s.state,cls);setPill('#pill-server','server: '+s.state,cls);
     $('#btn-start').disabled=s.running;$('#btn-stop').disabled=!s.running;
     $('#endpoint').hidden=!s.running;
-    if(s.running){const h=location.hostname;$('#ep-url').textContent=`http://${h}:${s.port}/v1`;$('#ep-ui').href=`http://${h}:${s.port}/`;$('#ep-metrics').href=`http://${h}:${s.port}/metrics`;}
+    if(s.running){const h=location.hostname;$('#ep-ui').href=`http://${h}:${s.port}/`;$('#ep-metrics').href=`http://${h}:${s.port}/metrics`;if(!wasRunning||!NET)await loadNet();}
     if(!s.running&&s.exit!=null&&s.exit!==0){setPill('#pill-srv','exited '+s.exit,'crit');if(wasRunning)toast(`llama-server exited with code ${s.exit} — see the log`);}
     wasRunning=s.running;
   }catch{}
@@ -3376,7 +3562,8 @@ async function testPrompt(){
 /* ---------- wiring ---------- */
 $('#btn-refresh').onclick=loadHW;
 $('#branch-sel').onchange=()=>{const c=$('#branch-sel').value==='__custom';$('#branch').hidden=!c;if(c)$('#branch').focus();};
-$('#backend').onchange=async()=>{await loadHW();if(QUANTS)listQuants();updateCmd();};
+$('#backend').onchange=async()=>{await loadHW();loadCatalog();if(QUANTS)listQuants();updateCmd();};
+['#ctx','#kv','#prio'].forEach(sel=>$(sel).addEventListener('change',()=>{loadCatalog();}));
 $('#btn-build').onclick=build;
 $('#btn-build-cancel').onclick=()=>post('/api/jobs/cancel',{id:$('#btn-build-cancel').dataset.id});
 $('#btn-repo').onclick=listQuants;$('#repo').addEventListener('keydown',e=>{if(e.key==='Enter')listQuants();});
@@ -3421,6 +3608,7 @@ def main():
     ensure_scripts()
     httpd = ThreadingHTTPServer((a.host, a.port), Handler)
     httpd.daemon_threads = True
+    httpd.bind_host = a.host
     url = f"http://{'localhost' if a.host in ('127.0.0.1', '0.0.0.0') else a.host}:{a.port}"
     print(f"AIOS {APP_VERSION}  ->  {url}   (root: {ROOT})")
     if not a.no_browser:
